@@ -1,4 +1,4 @@
-import SerialProvider from "@/components/SerialProvider";
+import SerialProvider from "@/providers/SerialProvider";
 import ConnectionGuard from "@/components/ConnectionGuard";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -25,7 +25,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <SerialProvider>
           <ConnectionGuard>{children}</ConnectionGuard>
         </SerialProvider>
