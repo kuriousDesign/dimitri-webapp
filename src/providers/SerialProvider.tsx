@@ -93,6 +93,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
           buffer = buffer.slice(newlineIndex + 1);
           
           // Update data with complete line
+          console.log("length of complete newline:", completeLine.length);
           setData(completeLine);
         }
       }

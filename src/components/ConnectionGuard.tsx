@@ -12,17 +12,12 @@ export default function ConnectionGuard({
   if (!connected) {
     return (
       <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          textAlign: "center",
-        }}
+        className="absolute  flex flex-col items-center justify-center h-screen w-screen left-1/2 top-1/3 transform -translate-x-1/2 -translate-y-1/2"
       >
-        <h1>Connect to a Serial Device</h1>
-        <p>Select and connect to a USB serial port to continue.</p>
+        <h1 className="text-2xl font-semibold">Connect to Arduino</h1>
+        <p>Click the connect button to show selection prompt</p>
+        <p>for your Arduino USB serial port.</p>
+        <div className="h-10" />
         {error && <p style={{ color: "red" }}>Error: {error}</p>}
         <button className="bg-black text-white rounded-full h-10 font-bold w-30"
           onClick={connect}
@@ -30,12 +25,7 @@ export default function ConnectionGuard({
         >
           Connect
         </button>
-        <p>
-          <small>
-            (Browser will prompt for port selection. Previously authorized ports
-            may auto-appear.)
-          </small>
-        </p>
+
       </div>
     );
   }
