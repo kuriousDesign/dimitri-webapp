@@ -1,6 +1,7 @@
 "use client";
 
-import { MOTOR_DATA_SIZE, NUM_MOTORS } from "@/types/types";
+import { MOTOR_DATA_SIZE, NUM_MOTORS, type MotorData } from "@/types/types";
+import { convertBytesToMotorData } from "@/lib/SerialHandlers";
 import {
   createContext,
   useContext,
@@ -9,7 +10,6 @@ import {
   useEffect,
 } from "react";
 
-// Type declarations for Web Serial API (fixes SerialPort and navigator.serial typing)
 declare global {
   interface Navigator {
     serial: {
@@ -23,7 +23,7 @@ declare global {
     close: () => Promise<void>;
     readable: ReadableStream<Uint8Array>;
     writable: WritableStream<Uint8Array>;
-    forget?: () => Promise<void>;  // Optional: For revoking access
+    forget?: () => Promise<void>;
   }
 }
 
@@ -32,7 +32,8 @@ type SerialContextType = {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   data: string;
-  error?: string;  // Optional: For basic warnings/errors
+  motorData: MotorData[];
+  error?: string;
 };
 
 const SerialContext = createContext<SerialContextType | null>(null);
@@ -46,13 +47,15 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [data, setData] = useState<string>("");
+  const [motorData, setMotorData] = useState<MotorData[]>(
+    Array.from({ length: NUM_MOTORS }, () => ({} as MotorData))
+  );
 
   const connect = async () => {
     try {
       setError(undefined);
-      // Request a new port (user selects via browser dialog)
       const selectedPort = await navigator.serial.requestPort({});
-      await selectedPort.open({ baudRate: 115200 });  // Adjust baud as needed
+      await selectedPort.open({ baudRate: 115200 });
       setPort(selectedPort);
       setConnected(true);
       readStream(selectedPort);
@@ -71,79 +74,73 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
         setPort(null);
         setConnected(false);
         setData("");
+        setMotorData(Array.from({ length: NUM_MOTORS }, () => ({} as MotorData)));
       }
     }
   };
 
   const readStream = async (p: SerialPort) => {
-    try {
-      const reader = p.readable.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let byteBuffer = new Uint8Array();
+    const reader = p.readable.getReader();
+    let buffer = new Uint8Array();
 
+    try {
       while (true) {
         const { value, done } = await reader.read();
-        if (done) {
-          reader.releaseLock();
-          break;
-        }
+        if (done) break;
+        if (value) {
+          buffer = new Uint8Array([...buffer, ...value]);
 
-        // Append new data to buffer
-        buffer += decoder.decode(value);
-        byteBuffer = new Uint8Array([...byteBuffer, ...value]);
+          while (true) {
+            const stxIndex = buffer.indexOf(STX);
+            const etxIndex = buffer.indexOf(ETX, stxIndex + 1);
+            const newlineIndex = buffer.indexOf(NEWLINE, etxIndex + 1);
 
-        //[STX][LEN][ID][DATA...][ETX][\n]
+            if (stxIndex === -1 || etxIndex === -1 || newlineIndex !== etxIndex + 1)
+              break;
 
-        // Process complete lines ending with ETX followed by newline
-        const totalMsgLength = 1 + 1 + 1 + NUM_MOTORS * MOTOR_DATA_SIZE + 1 + 1;//
-        while (buffer.includes('\x03\n') && buffer.length >= totalMsgLength) {
-          console.log("Found ETX and newline in buffer");
-          const etxNewlineIndex = buffer.indexOf('\x03\n');
-          //const newlineIndex = etxNewlineIndex + 1;
-          const stxLineIndex = buffer.indexOf('\x02');
+            const packet = buffer.slice(stxIndex, newlineIndex + 1);
+            const length = packet[1]; // LEN byte
+            const id = packet[2] === 0x0F ? 0 : packet[2];
 
-          // Update data with complete line
+            const payload = packet.slice(3, 3 + length);
 
-          if (stxLineIndex == 0) {
-            console.log("Found STX at beginning of buffer");
-   
-            const completeLine = buffer.slice(3, etxNewlineIndex);
-            
-            const expectedLength = byteBuffer[1]
-            const id = byteBuffer[2];
-            const dataBytes = byteBuffer.slice(3, etxNewlineIndex);
-            console.log("first index of dataBytes:", dataBytes[0]);
-            console.log("last index of dataBytes: ", dataBytes[dataBytes.length-1]);
- 
-            console.log("length of dataBytes:", dataBytes.length);
+            // Interpret payload bytes as needed
+            const interpretedPayload = Array.from(payload).map((b) => (b === 0x0F ? 0 : b));
 
-            if (expectedLength == dataBytes.length) {
-              if (id == 0) {
-                console.log("success");
-              } else {
-                console.warn("expected id of 0, got:",id);
+            //console.log("Packet ID (raw):", id); // <-- This will now correctly show 0 if Arduino sent 0
+            //console.log("Interpreted payload:", interpretedPayload);
+
+            if (id === 0 && interpretedPayload.length === NUM_MOTORS * MOTOR_DATA_SIZE + 2) {
+              const newMotorData: MotorData[] = [];
+              for (let i = 0; i < NUM_MOTORS; i++) {
+                const motorBytes = interpretedPayload.slice(
+                  i * MOTOR_DATA_SIZE,
+                  (i + 1) * MOTOR_DATA_SIZE
+                );
+                newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
               }
-
-              setData(completeLine);
-            } else {
-              console.warn("data length mismatch, expected",expectedLength,"received",dataBytes.length);
+              setMotorData(newMotorData);
+              console.log("New motor data:", newMotorData);
+              // convert last two bytes of payload to be loopState (little-endian)
+              const loopState: number = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] | (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
+              // Convert from unsigned to signed int16
+              const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
+              console.log("New loop state:", signedLoopState);
             }
-          } else {
-            console.warn("STX not at beginning of buffer, discarding malformed data");
+
+            // Remove processed packet
+            buffer = buffer.slice(newlineIndex + 1);
           }
-          // delete data from byteBuffer and buffer before and up to newline
-          byteBuffer = byteBuffer.slice(etxNewlineIndex + 2);
-          buffer = buffer.slice(etxNewlineIndex + 2);
         }
       }
     } catch (err) {
       setError((err as Error).message || "Stream error");
       disconnect();
+    } finally {
+      reader.releaseLock();
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       disconnect();
@@ -152,7 +149,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
 
   return (
     <SerialContext.Provider
-      value={{ connected, connect, disconnect, data, error }}
+      value={{ connected, connect, disconnect, data, motorData, error }}
     >
       {children}
     </SerialContext.Provider>
