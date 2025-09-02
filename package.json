@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@serialport/parser-delimiter": "^13.0.0",
     "next": "15.5.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "serialport": "^13.0.0",
     "signals-react-safe": "^1.2.0"
   },
   "devDependencies": {

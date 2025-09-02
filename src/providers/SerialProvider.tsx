@@ -1,5 +1,6 @@
 "use client";
 
+import { MOTOR_DATA_SIZE, NUM_MOTORS } from "@/types/types";
 import {
   createContext,
   useContext,
@@ -35,6 +36,10 @@ type SerialContextType = {
 };
 
 const SerialContext = createContext<SerialContextType | null>(null);
+
+const STX = 0x02;
+const ETX = 0x03;
+const NEWLINE = 0x0A;
 
 export default function SerialProvider({ children }: { children: ReactNode }) {
   const [port, setPort] = useState<SerialPort | null>(null);
@@ -75,6 +80,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
       const reader = p.readable.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let byteBuffer = new Uint8Array();
 
       while (true) {
         const { value, done } = await reader.read();
@@ -82,19 +88,53 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
           reader.releaseLock();
           break;
         }
-        
+
         // Append new data to buffer
         buffer += decoder.decode(value);
-        
-        // Process complete lines
-        while (buffer.includes('\n')) {
-          const newlineIndex = buffer.indexOf('\n');
-          const completeLine = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-          
+        byteBuffer = new Uint8Array([...byteBuffer, ...value]);
+
+        //[STX][LEN][ID][DATA...][ETX][\n]
+
+        // Process complete lines ending with ETX followed by newline
+        const totalMsgLength = 1 + 1 + 1 + NUM_MOTORS * MOTOR_DATA_SIZE + 1 + 1;//
+        while (buffer.includes('\x03\n') && buffer.length >= totalMsgLength) {
+          console.log("Found ETX and newline in buffer");
+          const etxNewlineIndex = buffer.indexOf('\x03\n');
+          //const newlineIndex = etxNewlineIndex + 1;
+          const stxLineIndex = buffer.indexOf('\x02');
+
           // Update data with complete line
-          console.log("length of complete newline:", completeLine.length);
-          setData(completeLine);
+
+          if (stxLineIndex == 0) {
+            console.log("Found STX at beginning of buffer");
+   
+            const completeLine = buffer.slice(3, etxNewlineIndex);
+            
+            const expectedLength = byteBuffer[1]
+            const id = byteBuffer[2];
+            const dataBytes = byteBuffer.slice(3, etxNewlineIndex);
+            console.log("first index of dataBytes:", dataBytes[0]);
+            console.log("last index of dataBytes: ", dataBytes[dataBytes.length-1]);
+ 
+            console.log("length of dataBytes:", dataBytes.length);
+
+            if (expectedLength == dataBytes.length) {
+              if (id == 0) {
+                console.log("success");
+              } else {
+                console.warn("expected id of 0, got:",id);
+              }
+
+              setData(completeLine);
+            } else {
+              console.warn("data length mismatch, expected",expectedLength,"received",dataBytes.length);
+            }
+          } else {
+            console.warn("STX not at beginning of buffer, discarding malformed data");
+          }
+          // delete data from byteBuffer and buffer before and up to newline
+          byteBuffer = byteBuffer.slice(etxNewlineIndex + 2);
+          buffer = buffer.slice(etxNewlineIndex + 2);
         }
       }
     } catch (err) {
