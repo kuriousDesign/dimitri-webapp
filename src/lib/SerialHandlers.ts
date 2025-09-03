@@ -1,4 +1,4 @@
-import { MotorData } from "@/types/types";
+import { MotorData } from "@/types/motor";
 
 // in need to convert a chunk of bytes (sent from arduino due) into MotorData
 export function convertBytesToMotorData(bytes: Uint8Array): MotorData {

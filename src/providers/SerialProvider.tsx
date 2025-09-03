@@ -1,6 +1,6 @@
 "use client";
 
-import { MOTOR_DATA_SIZE, NUM_MOTORS, type MotorData } from "@/types/types";
+import { MOTOR_DATA_SIZE, NUM_MOTORS, MotorData } from "@/types/motor";
 import { convertBytesToMotorData } from "@/lib/SerialHandlers";
 import {
   createContext,
@@ -33,6 +33,7 @@ type SerialContextType = {
   disconnect: () => Promise<void>;
   data: string;
   motorData: MotorData[];
+  dimitriState: number;
   error?: string;
 };
 
@@ -50,6 +51,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
   const [motorData, setMotorData] = useState<MotorData[]>(
     Array.from({ length: NUM_MOTORS }, () => ({} as MotorData))
   );
+  const [dimitriState, setDimitriState] = useState<number>(0);
 
   const connect = async () => {
     try {
@@ -120,12 +122,13 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
                 newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
               }
               setMotorData(newMotorData);
-              console.log("New motor data:", newMotorData);
+              //console.log("clutch motor state:", newMotorData[0].state);
               // convert last two bytes of payload to be loopState (little-endian)
               const loopState: number = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] | (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
               // Convert from unsigned to signed int16
               const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
               console.log("New loop state:", signedLoopState);
+              setDimitriState(signedLoopState);
             }
 
             // Remove processed packet
@@ -149,7 +152,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
 
   return (
     <SerialContext.Provider
-      value={{ connected, connect, disconnect, data, motorData, error }}
+      value={{ connected, connect, disconnect, data, motorData, error, dimitriState }}
     >
       {children}
     </SerialContext.Provider>
