@@ -8,7 +8,7 @@ export function convertBytesToMotorData(bytes: Uint8Array): MotorData {
     actualPosition: dataView.getFloat32(2, true),
     actualVelocity: dataView.getFloat32(6, true),
     targetPosition: dataView.getFloat32(10, true),
+    activeProcess: dataView.getUint8(14),
+    processStep: dataView.getInt16(15, true)
   };
 }
-
-// i need a function that 

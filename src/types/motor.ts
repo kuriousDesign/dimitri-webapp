@@ -24,10 +24,13 @@ export function convertMotorIndexToString(index: number): string {
 }
 
 export interface MotorData {
-  state: number;
-  actualPosition: number;
-  actualVelocity: number;
-  targetPosition: number;
+  state: number; //int16
+  actualPosition: number; //float
+  actualVelocity: number; //float
+  targetPosition: number; //float
+  activeProcess: number; //uint8
+  processStep: number; //int16
+
 };
 
 // export const STX = 0x02; // Start of Text
@@ -78,3 +81,21 @@ export function convertMotorStateToColor(state: MotorStates): string {
       return "text-gray-500";
   }
 }
+
+
+export enum MotorProcesses
+{
+    NONE_PROCESS = 0,
+    HOME = 1,
+};
+
+export function convertMotorProcessToString(process: MotorProcesses) {
+    switch (process) {
+        case MotorProcesses.NONE_PROCESS:
+            return "None";
+        case MotorProcesses.HOME:
+            return "Homing";
+        default:
+            return "Unknown";
+    } 
+};
