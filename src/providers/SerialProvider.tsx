@@ -9,6 +9,7 @@ import {
   type ReactNode,
   useEffect,
 } from "react";
+import { DimitriData, OperatingModes } from "@/types/device";
 
 declare global {
   interface Navigator {
@@ -33,8 +34,9 @@ type SerialContextType = {
   disconnect: () => Promise<void>;
   data: string;
   motorData: MotorData[];
-  dimitriState: number;
+  dimitriData: DimitriData;
   error?: string;
+  receivingData: boolean;
 };
 
 const SerialContext = createContext<SerialContextType | null>(null);
@@ -42,6 +44,8 @@ const SerialContext = createContext<SerialContextType | null>(null);
 const STX = 0x02;
 const ETX = 0x03;
 const NEWLINE = 0x0A;
+
+const PACKET_SIZE = NUM_MOTORS * MOTOR_DATA_SIZE + 2 + 1; // 2 bytes for loopState and 1 byte for operation mode
 
 export default function SerialProvider({ children }: { children: ReactNode }) {
   const [port, setPort] = useState<SerialPort | null>(null);
@@ -51,7 +55,11 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
   const [motorData, setMotorData] = useState<MotorData[]>(
     Array.from({ length: NUM_MOTORS }, () => ({} as MotorData))
   );
-  const [dimitriState, setDimitriState] = useState<number>(0);
+  const [dimitriData, setDimitriData] = useState<DimitriData>({
+    loopState: 0,
+    operatingMode: OperatingModes.UNKNOWN,
+  });
+  const [receivingData, setReceivingData] = useState(false);
 
   const connect = async () => {
     try {
@@ -112,7 +120,8 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
             //console.log("Packet ID (raw):", id); // <-- This will now correctly show 0 if Arduino sent 0
             //console.log("Interpreted payload:", interpretedPayload);
 
-            if (id === 0 && interpretedPayload.length === NUM_MOTORS * MOTOR_DATA_SIZE + 2) {
+            if (id === 0 && interpretedPayload.length === PACKET_SIZE) {
+              setReceivingData(true);
               const newMotorData: MotorData[] = [];
               for (let i = 0; i < NUM_MOTORS; i++) {
                 const motorBytes = interpretedPayload.slice(
@@ -127,8 +136,23 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
               const loopState: number = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] | (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
               // Convert from unsigned to signed int16
               const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
-              console.log("New loop state:", signedLoopState);
-              setDimitriState(signedLoopState);
+              //console.log("New loop state:", signedLoopState);
+              const newOperatingMode = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 2];
+              //console.log("New operating mode:", newOperatingMode);
+              // Update dimitriData state
+
+              const newDimitriData = {
+                loopState: signedLoopState,
+                operatingMode: newOperatingMode, // New operation mode byte
+              }
+
+              setDimitriData(newDimitriData);
+            } else if(id === 0) {
+              console.warn("incorrect payload size:", interpretedPayload.length, "expected:", PACKET_SIZE);
+              setReceivingData(false);
+            } else {
+              console.warn("unknown packet ID:", id);
+              setReceivingData(false);
             }
 
             // Remove processed packet
@@ -152,7 +176,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
 
   return (
     <SerialContext.Provider
-      value={{ connected, connect, disconnect, data, motorData, error, dimitriState }}
+      value={{ connected, connect, disconnect, data, motorData, error, dimitriData, receivingData }}
     >
       {children}
     </SerialContext.Provider>

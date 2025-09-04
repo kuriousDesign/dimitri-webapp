@@ -106,3 +106,38 @@ export function getModeFromState(state:number): Modes {
 
     return mode;
 }
+
+export enum OperatingModes
+{
+  AUTO = 0,
+  MANUAL_CLUTCH_JOGGING = 1,
+  MANUAL_LINEAR_P = 2,
+  MANUAL_LINEAR_S = 3,
+  IO_CHECKOUT = 4,
+  MANUAL_CLUTCH_ENGAGE = 5,
+  UNKNOWN = 255
+};
+
+export function convertOperatingModeToString(mode:OperatingModes) {
+    switch (mode) {
+        case OperatingModes.AUTO:
+            return "AUTO";
+        case OperatingModes.MANUAL_CLUTCH_JOGGING:
+            return "MANUAL_CLUTCH_JOGGING";
+        case OperatingModes.MANUAL_LINEAR_P:
+            return "MANUAL_LINEAR_P";
+        case OperatingModes.MANUAL_LINEAR_S:
+            return "MANUAL_LINEAR_S";
+        case OperatingModes.IO_CHECKOUT:
+            return "IO_CHECKOUT";
+        case OperatingModes.MANUAL_CLUTCH_ENGAGE:
+            return "MANUAL_CLUTCH_ENGAGE";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+export interface DimitriData {
+    loopState: number; // Current state of the main loop
+    operatingMode: OperatingModes; // Current operating mode
+}
