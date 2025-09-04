@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@kuriousdesign/machine-sdk": "^1.0.12",
     "@serialport/parser-delimiter": "^13.0.0",
     "next": "15.5.2",
     "react": "19.1.0",
