@@ -1,7 +1,7 @@
 // MotorData
 // gather motor data and convert into byte chunk, total bytes = int16 (state), float (position), float, float = 14
 
-export const MOTOR_DATA_SIZE = 14;
+export const MOTOR_DATA_SIZE = 17;
 export const NUM_MOTORS = 3;
 
 export const Motors = {

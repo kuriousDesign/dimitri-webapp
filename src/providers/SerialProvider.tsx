@@ -9,7 +9,7 @@ import {
   type ReactNode,
   useEffect,
 } from "react";
-import { DimitriData, OperatingModes } from "@/types/device";
+import { DimitriData, initialDimitriData, PACKET_SIZE } from "@/types/device";
 
 declare global {
   interface Navigator {
@@ -45,7 +45,6 @@ const STX = 0x02;
 const ETX = 0x03;
 const NEWLINE = 0x0A;
 
-const PACKET_SIZE = NUM_MOTORS * MOTOR_DATA_SIZE + 2 + 1; // 2 bytes for loopState and 1 byte for operation mode
 
 export default function SerialProvider({ children }: { children: ReactNode }) {
   const [port, setPort] = useState<SerialPort | null>(null);
@@ -55,10 +54,7 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
   const [motorData, setMotorData] = useState<MotorData[]>(
     Array.from({ length: NUM_MOTORS }, () => ({} as MotorData))
   );
-  const [dimitriData, setDimitriData] = useState<DimitriData>({
-    loopState: 0,
-    operatingMode: OperatingModes.UNKNOWN,
-  });
+  const [dimitriData, setDimitriData] = useState<DimitriData>(initialDimitriData);
   const [receivingData, setReceivingData] = useState(false);
 
   const connect = async () => {
@@ -89,99 +85,107 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
     }
   };
 
- const readStream = async (p: SerialPort) => {
-  const reader = p.readable.getReader();
-  let buffer = new Uint8Array();
+  const readStream = async (p: SerialPort) => {
+    const reader = p.readable.getReader();
+    let buffer = new Uint8Array();
 
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (!value) continue;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
 
-      buffer = new Uint8Array([...buffer, ...value]);
+        buffer = new Uint8Array([...buffer, ...value]);
 
-      // safety check
-      if (buffer.length > 3 * PACKET_SIZE) {
-        console.warn("Buffer overflow, clearing");
-        buffer = new Uint8Array();
-        setReceivingData(false);
-        continue;
-      }
-
-      while (buffer.length >= 5) { // minimal packet: STX + LEN + ID + ETX + NEWLINE
-        const stxIndex = buffer.indexOf(STX);
-        if (stxIndex === -1) {
-          buffer = new Uint8Array(); // no STX at all
-          break;
-        }
-
-        // remove any leading garbage bytes
-        if (stxIndex > 0) buffer = buffer.slice(stxIndex);
-
-        if (buffer.length < 5) break; // not enough for minimal packet
-
-        const length = buffer[1];
-        const fullPacketSize = 1 + 1 + 1 + length + 1 + 1; // STX + LEN + ID + DATA + ETX + NEWLINE
-
-        if (buffer.length < fullPacketSize) break; // wait for more data
-
-        const packet = buffer.slice(0, fullPacketSize);
-
-        if (packet[fullPacketSize - 2] !== ETX || packet[fullPacketSize - 1] !== NEWLINE) {
-          // corrupted packet, skip this STX and try next
-          buffer = buffer.slice(1);
+        // safety check
+        if (buffer.length > 3 * PACKET_SIZE) {
+          console.warn("Buffer overflow, clearing ", buffer.length, "bytes");
+          buffer = new Uint8Array();
+          setReceivingData(false);
           continue;
         }
 
-        // packet looks valid
-        const id = packet[2] === 0x0F ? 0 : packet[2];
-        const payload = packet.slice(3, 3 + length);
-        const interpretedPayload = Array.from(payload).map((b) => (b === 0x0F ? 0 : b));
-
-        if (id === 0 && interpretedPayload.length === PACKET_SIZE) {
-          setReceivingData(true);
-
-          const newMotorData: MotorData[] = [];
-          for (let i = 0; i < NUM_MOTORS; i++) {
-            const motorBytes = interpretedPayload.slice(
-              i * MOTOR_DATA_SIZE,
-              (i + 1) * MOTOR_DATA_SIZE
-            );
-            newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
+        while (buffer.length >= 5) { // minimal packet: STX + LEN + ID + ETX + NEWLINE
+          const stxIndex = buffer.indexOf(STX);
+          if (stxIndex === -1) {
+            buffer = new Uint8Array(); // no STX at all
+            break;
           }
-          setMotorData(newMotorData);
 
-          const loopState =
-            interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] |
-            (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
-          const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
-          const newOperatingMode =
-            interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 2];
+          // remove any leading garbage bytes
+          if (stxIndex > 0) buffer = buffer.slice(stxIndex);
 
-          setDimitriData({ loopState: signedLoopState, operatingMode: newOperatingMode });
-        } else {
-          console.warn("Bad packet or unknown ID:", id);
-          setReceivingData(false);
+          if (buffer.length < 5) break; // not enough for minimal packet
+
+          const length = buffer[1];
+          const fullPacketSize = 1 + 1 + 1 + length + 1 + 1; // STX + LEN + ID + DATA + ETX + NEWLINE
+
+          if (buffer.length < fullPacketSize) break; // wait for more data
+
+          const packet = buffer.slice(0, fullPacketSize);
+
+          if (packet[fullPacketSize - 2] !== ETX || packet[fullPacketSize - 1] !== NEWLINE) {
+            // corrupted packet, skip this STX and try next
+            buffer = buffer.slice(1);
+            continue;
+          }
+
+          // packet looks valid
+          const id = packet[2] === 0x0F ? 0 : packet[2];
+          const rawPayload = packet.slice(3, 3 + length);
+          const payload = Array.from(rawPayload).map((b) => (b === 0x0F ? 0 : b));
+
+          if (id === 0 && payload.length === PACKET_SIZE) {
+            setReceivingData(true);
+
+            const newMotorData: MotorData[] = [];
+            for (let i = 0; i < NUM_MOTORS; i++) {
+              const motorBytes = payload.slice(
+                i * MOTOR_DATA_SIZE,
+                (i + 1) * MOTOR_DATA_SIZE
+              );
+              newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
+            }
+            setMotorData(newMotorData);
+
+            const loopState =
+              payload[NUM_MOTORS * MOTOR_DATA_SIZE] |
+              (payload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
+            const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
+            const newOperatingMode =
+              payload[NUM_MOTORS * MOTOR_DATA_SIZE + 2];
+
+            const newInputs: boolean[] = [];
+            for (let i = 0; i < 8; i++) {
+              newInputs.push(!!(payload[NUM_MOTORS * MOTOR_DATA_SIZE + 3] & (1 << i)));
+            }
+
+            setDimitriData({ loopState: signedLoopState, operatingMode: newOperatingMode, inputs: newInputs });
+          } else if (payload.length !== PACKET_SIZE) {
+            console.warn("Bad serial packet length:", payload.length, "expected:", PACKET_SIZE);
+          } else {
+            console.warn("unknown serial packet ID:", id);
+            setReceivingData(false);
+          }
+
+          // remove processed packet
+          buffer = buffer.slice(fullPacketSize);
         }
-
-        // remove processed packet
-        buffer = buffer.slice(fullPacketSize);
       }
+    } catch (err) {
+      setError((err as Error).message || "Stream error");
+      console.error("Stream error:", err);
+      disconnect();
+    } finally {
+      reader.releaseLock();
     }
-  } catch (err) {
-    setError((err as Error).message || "Stream error");
-    console.error("Stream error:", err);
-    disconnect();
-  } finally {
-    reader.releaseLock();
-  }
-};
+  };
 
   useEffect(() => {
     return () => {
       disconnect();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [port]);
 
   return (

@@ -1,3 +1,8 @@
+import { MOTOR_DATA_SIZE, NUM_MOTORS } from "./motor";
+
+export const DIMITRI_DATA_SIZE = 4; // 2 bytes for loopStep and 1 byte for operation mode and 1 byte for inputs
+export const PACKET_SIZE = NUM_MOTORS * MOTOR_DATA_SIZE + DIMITRI_DATA_SIZE; // 2 bytes for loopStep and 1 byte for operation mode
+
 export enum Modes {
     ABORTING = -3,
     KILLED = -2,
@@ -140,4 +145,66 @@ export function convertOperatingModeToString(mode:OperatingModes) {
 export interface DimitriData {
     loopState: number; // Current state of the main loop
     operatingMode: OperatingModes; // Current operating mode
+    inputs: boolean[]; // Bitfield representing the state of various inputs (optional)
 }
+
+export const initialDimitriData: DimitriData = {
+    loopState: Modes.UNKNOWN,
+    operatingMode: OperatingModes.UNKNOWN,
+    inputs: Array.from({ length: 8 }, () => false),
+  }
+
+export enum Inputs
+{
+    ShiftDownSw = 0,
+    ShiftUpSw = 1,
+    ClutchNegLimSw = 2,
+    ClutchPosLimSw = 3
+};
+
+export interface InputItem {
+    name: string;
+    labelWhenTrue?: string;
+    labelWhenFalse?: string;
+    colorWhenTrue?: string;
+    colorWhenFalse?: string;
+}
+
+export const defaultInputItem: InputItem = {
+    name: "input",
+    labelWhenTrue: "ON",
+    labelWhenFalse: "OFF",
+    colorWhenTrue: "bg-green-500",
+    colorWhenFalse: "bg-gray-500",
+}
+
+export const INPUT_MAP: Map<Inputs, InputItem> = new Map([
+    [Inputs.ShiftDownSw, {
+        name: "Shift Down Sw",
+        labelWhenTrue: defaultInputItem.labelWhenTrue,
+        labelWhenFalse: defaultInputItem.labelWhenFalse,
+        colorWhenTrue: defaultInputItem.colorWhenTrue,
+        colorWhenFalse: defaultInputItem.colorWhenFalse
+    }],
+    [Inputs.ShiftUpSw, {
+        name: "Shift Up Sw",
+        labelWhenTrue: defaultInputItem.labelWhenTrue,
+        labelWhenFalse: defaultInputItem.labelWhenFalse,
+        colorWhenTrue: defaultInputItem.colorWhenTrue,
+        colorWhenFalse: defaultInputItem.colorWhenFalse
+    }],
+    [Inputs.ClutchNegLimSw, {
+        name: "Clutch Negative Lim Sw",
+        labelWhenTrue: defaultInputItem.labelWhenTrue,
+        labelWhenFalse: defaultInputItem.labelWhenFalse,
+        colorWhenTrue: defaultInputItem.colorWhenTrue,
+        colorWhenFalse: defaultInputItem.colorWhenFalse
+    }],
+    [Inputs.ClutchPosLimSw, {
+        name: "Clutch Positive Lim Sw",
+        labelWhenTrue: defaultInputItem.labelWhenTrue,
+        labelWhenFalse: defaultInputItem.labelWhenFalse,
+        colorWhenTrue: defaultInputItem.colorWhenTrue,
+        colorWhenFalse: defaultInputItem.colorWhenFalse
+    }]
+]);
