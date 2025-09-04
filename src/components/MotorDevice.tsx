@@ -7,7 +7,6 @@ interface MotorDeviceProps {
     name: string;
 }
 
-
 const MotorDevice: React.FC<MotorDeviceProps> = ({ motorData, name }) => {
     const stateTextColor = `text-lg font-bold ${convertMotorStateToColor(motorData.state)}`;
     //console.log(stateTextColor);
