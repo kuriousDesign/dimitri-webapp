@@ -89,84 +89,94 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const readStream = async (p: SerialPort) => {
-    const reader = p.readable.getReader();
-    let buffer = new Uint8Array();
+ const readStream = async (p: SerialPort) => {
+  const reader = p.readable.getReader();
+  let buffer = new Uint8Array();
 
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          buffer = new Uint8Array([...buffer, ...value]);
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
 
-          while (true) {
-            const stxIndex = buffer.indexOf(STX);
-            const etxIndex = buffer.indexOf(ETX, stxIndex + 1);
-            const newlineIndex = buffer.indexOf(NEWLINE, etxIndex + 1);
+      buffer = new Uint8Array([...buffer, ...value]);
 
-            if (stxIndex === -1 || etxIndex === -1 || newlineIndex !== etxIndex + 1)
-              break;
-
-            const packet = buffer.slice(stxIndex, newlineIndex + 1);
-            const length = packet[1]; // LEN byte
-            const id = packet[2] === 0x0F ? 0 : packet[2];
-
-            const payload = packet.slice(3, 3 + length);
-
-            // Interpret payload bytes as needed
-            const interpretedPayload = Array.from(payload).map((b) => (b === 0x0F ? 0 : b));
-
-            //console.log("Packet ID (raw):", id); // <-- This will now correctly show 0 if Arduino sent 0
-            //console.log("Interpreted payload:", interpretedPayload);
-
-            if (id === 0 && interpretedPayload.length === PACKET_SIZE) {
-              setReceivingData(true);
-              const newMotorData: MotorData[] = [];
-              for (let i = 0; i < NUM_MOTORS; i++) {
-                const motorBytes = interpretedPayload.slice(
-                  i * MOTOR_DATA_SIZE,
-                  (i + 1) * MOTOR_DATA_SIZE
-                );
-                newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
-              }
-              setMotorData(newMotorData);
-              //console.log("clutch motor state:", newMotorData[0].state);
-              // convert last two bytes of payload to be loopState (little-endian)
-              const loopState: number = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] | (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
-              // Convert from unsigned to signed int16
-              const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
-              //console.log("New loop state:", signedLoopState);
-              const newOperatingMode = interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 2];
-              //console.log("New operating mode:", newOperatingMode);
-              // Update dimitriData state
-
-              const newDimitriData = {
-                loopState: signedLoopState,
-                operatingMode: newOperatingMode, // New operation mode byte
-              }
-
-              setDimitriData(newDimitriData);
-            } else if(id === 0) {
-              console.warn("incorrect payload size:", interpretedPayload.length, "expected:", PACKET_SIZE);
-              setReceivingData(false);
-            } else {
-              console.warn("unknown packet ID:", id);
-              setReceivingData(false);
-            }
-
-            // Remove processed packet
-            buffer = buffer.slice(newlineIndex + 1);
-          }
-        }
+      // safety check
+      if (buffer.length > 3 * PACKET_SIZE) {
+        console.warn("Buffer overflow, clearing");
+        buffer = new Uint8Array();
+        setReceivingData(false);
+        continue;
       }
-    } catch (err) {
-      setError((err as Error).message || "Stream error");
-      disconnect();
-    } finally {
-      reader.releaseLock();
+
+      while (buffer.length >= 5) { // minimal packet: STX + LEN + ID + ETX + NEWLINE
+        const stxIndex = buffer.indexOf(STX);
+        if (stxIndex === -1) {
+          buffer = new Uint8Array(); // no STX at all
+          break;
+        }
+
+        // remove any leading garbage bytes
+        if (stxIndex > 0) buffer = buffer.slice(stxIndex);
+
+        if (buffer.length < 5) break; // not enough for minimal packet
+
+        const length = buffer[1];
+        const fullPacketSize = 1 + 1 + 1 + length + 1 + 1; // STX + LEN + ID + DATA + ETX + NEWLINE
+
+        if (buffer.length < fullPacketSize) break; // wait for more data
+
+        const packet = buffer.slice(0, fullPacketSize);
+
+        if (packet[fullPacketSize - 2] !== ETX || packet[fullPacketSize - 1] !== NEWLINE) {
+          // corrupted packet, skip this STX and try next
+          buffer = buffer.slice(1);
+          continue;
+        }
+
+        // packet looks valid
+        const id = packet[2] === 0x0F ? 0 : packet[2];
+        const payload = packet.slice(3, 3 + length);
+        const interpretedPayload = Array.from(payload).map((b) => (b === 0x0F ? 0 : b));
+
+        if (id === 0 && interpretedPayload.length === PACKET_SIZE) {
+          setReceivingData(true);
+
+          const newMotorData: MotorData[] = [];
+          for (let i = 0; i < NUM_MOTORS; i++) {
+            const motorBytes = interpretedPayload.slice(
+              i * MOTOR_DATA_SIZE,
+              (i + 1) * MOTOR_DATA_SIZE
+            );
+            newMotorData.push(convertBytesToMotorData(new Uint8Array(motorBytes)));
+          }
+          setMotorData(newMotorData);
+
+          const loopState =
+            interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE] |
+            (interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 1] << 8);
+          const signedLoopState = loopState > 32767 ? loopState - 65536 : loopState;
+          const newOperatingMode =
+            interpretedPayload[NUM_MOTORS * MOTOR_DATA_SIZE + 2];
+
+          setDimitriData({ loopState: signedLoopState, operatingMode: newOperatingMode });
+        } else {
+          console.warn("Bad packet or unknown ID:", id);
+          setReceivingData(false);
+        }
+
+        // remove processed packet
+        buffer = buffer.slice(fullPacketSize);
+      }
     }
-  };
+  } catch (err) {
+    setError((err as Error).message || "Stream error");
+    console.error("Stream error:", err);
+    disconnect();
+  } finally {
+    reader.releaseLock();
+  }
+};
 
   useEffect(() => {
     return () => {
