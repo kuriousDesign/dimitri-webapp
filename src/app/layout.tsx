@@ -3,7 +3,7 @@ import ConnectionGuard from "@/components/ConnectionGuard";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import '@kuriousdesign/machine-sdk/styles/animations.css';
+import "../styles/animations.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
