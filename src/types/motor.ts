@@ -1,7 +1,7 @@
 // MotorData
 // gather motor data and convert into byte chunk, total bytes = int16 (state), float (position), float, float = 14
 
-export const MOTOR_DATA_SIZE = 17;
+
 export const NUM_MOTORS = 3;
 
 export const Motors = {
@@ -30,8 +30,24 @@ export interface MotorData {
   targetPosition: number; //float
   activeProcess: number; //uint8
   processStep: number; //int16
-
+  outputPower: number; //int16
 };
+
+export const MOTOR_DATA_SIZE = 19;
+
+export function convertBytesToMotorData(bytes: Uint8Array): MotorData {
+  const dataView = new DataView(bytes.buffer);
+  let i = 0;
+  return {
+    state: dataView.getInt16(i, true),
+    actualPosition: dataView.getFloat32(i += 2, true),
+    actualVelocity: dataView.getFloat32(i += 4, true),
+    targetPosition: dataView.getFloat32(i += 4, true),
+    activeProcess: dataView.getUint8(i += 4),
+    processStep: dataView.getInt16(i += 1, true),
+    outputPower: dataView.getInt16(i += 2, true)
+  };
+}
 
 // export const STX = 0x02; // Start of Text
 // export const ETX = 0x03; // End of Text

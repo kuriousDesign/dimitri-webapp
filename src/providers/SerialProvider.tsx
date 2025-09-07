@@ -1,7 +1,7 @@
 "use client";
 
-import { MOTOR_DATA_SIZE, NUM_MOTORS, MotorData } from "@/types/motor";
-import { convertBytesToMotorData } from "@/lib/SerialHandlers";
+import { MOTOR_DATA_SIZE, NUM_MOTORS, MotorData, convertBytesToMotorData } from "@/types/motor";
+
 import {
   createContext,
   useContext,
