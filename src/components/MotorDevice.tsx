@@ -15,10 +15,10 @@ const MotorDevice: React.FC<MotorDeviceProps> = ({ motorData, name }) => {
         <div className="w-full h-4 text-xs text-gray-600 text-center bg-gray-900 mb-1">MOTOR</div>
         <h1 className="text-2xl font-bold text-gray-400">{name}</h1>
         <h2 className={stateTextColor}>{convertMotorStateToString(motorData.state)}</h2>
-        <h3 className="text-md">Position: {motorData.actualPosition}</h3>
-        <h3 className="text-md">Target: {motorData.targetPosition}</h3>
-        <h3 className="text-md">Velocity: {motorData.actualVelocity}</h3>
-        <h3 className="text-md">Power: {motorData.outputPower}</h3>
+        <h3 className="text-md">Position: {motorData.actualPosition.toFixed(2)}</h3>
+        <h3 className="text-md">Target: {motorData.targetPosition.toFixed(2)}</h3>
+        <h3 className="text-md">Velocity: {motorData.actualVelocity.toFixed(2)}</h3>
+        <h3 className="text-md">Power%: {(motorData.outputPower/100.0).toFixed(2)}</h3>
         {motorData.activeProcess !== 0 && <h3 className="text-md text-blue-500">{convertMotorProcessToString(motorData.activeProcess)} Process - step {motorData.processStep}</h3>}
       </div>
     );
