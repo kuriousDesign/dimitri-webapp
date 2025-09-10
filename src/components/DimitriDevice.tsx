@@ -19,7 +19,7 @@ const MotorDevice: React.FC<DimitriDeviceProps> = ({ data }) => {
       <h2 className="text-md text-gray-400">Operating Mode: {convertOperatingModeToString(data.operatingMode)}</h2>
       <h2 className={stateTextColor}>State: {convertModeToString(mode)}</h2>
       <h3 className="text-md">Step: {data.loopState}</h3>
-
+      <h3 className="text-md">Clutch Device State: {data.clutchDeviceState}</h3>
       <InputsComponent inputStates={data.inputs} inputItems={INPUT_MAP.size > 0 ? Array.from(INPUT_MAP.values()) : []} />
     </div>
   );

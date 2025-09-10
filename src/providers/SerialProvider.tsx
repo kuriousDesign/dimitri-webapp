@@ -159,8 +159,11 @@ export default function SerialProvider({ children }: { children: ReactNode }) {
             for (let i = 0; i < 8; i++) {
               newInputs.push(!!(payload[NUM_MOTORS * MOTOR_DATA_SIZE + 3] & (1 << i)));
             }
+            const newClutchDeviceState =
+              payload[NUM_MOTORS * MOTOR_DATA_SIZE + 4] |
+              (payload[NUM_MOTORS * MOTOR_DATA_SIZE + 5] << 8);
 
-            setDimitriData({ loopState: signedLoopState, operatingMode: newOperatingMode, inputs: newInputs });
+            setDimitriData({ loopState: signedLoopState, operatingMode: newOperatingMode, inputs: newInputs, clutchDeviceState: newClutchDeviceState });
           } else if (payload.length !== PACKET_SIZE) {
             console.warn("Bad serial packet length:", payload.length, "expected:", PACKET_SIZE);
           } else {

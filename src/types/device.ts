@@ -1,6 +1,6 @@
 import { MOTOR_DATA_SIZE, NUM_MOTORS } from "./motor";
 
-export const DIMITRI_DATA_SIZE = 4; // 2 bytes for loopStep and 1 byte for operation mode and 1 byte for inputs
+export const DIMITRI_DATA_SIZE = 6; // 2 bytes for loopStep and 1 byte for operation mode and 1 byte for inputs and 2 bytes for clutchDeviceState
 export const PACKET_SIZE = NUM_MOTORS * MOTOR_DATA_SIZE + DIMITRI_DATA_SIZE; // 2 bytes for loopStep and 1 byte for operation mode
 
 export enum Modes {
@@ -146,12 +146,14 @@ export interface DimitriData {
     loopState: number; // Current state of the main loop
     operatingMode: OperatingModes; // Current operating mode
     inputs: boolean[]; // Bitfield representing the state of various inputs (optional)
+    clutchDeviceState: number; // Current state of the clutch device (optional)
 }
 
 export const initialDimitriData: DimitriData = {
     loopState: Modes.UNKNOWN,
     operatingMode: OperatingModes.UNKNOWN,
     inputs: Array.from({ length: 8 }, () => false),
+    clutchDeviceState: Modes.UNKNOWN,
   }
 
 export enum Inputs
